@@ -1,10 +1,8 @@
 # Adapted from : VGG 16 model : https://github.com/machrisaa/tensorflow-vgg
 import time
 import os
-import inspect
 
 import numpy as np
-from termcolor import colored
 import tensorflow as tf
 
 from hed.losses import sigmoid_cross_entropy_balanced
@@ -12,7 +10,6 @@ from hed.utils.io import IO
 
 
 class Vgg16():
-
     def __init__(self, cfgs, run='training'):
 
         self.cfgs = cfgs
@@ -22,15 +19,21 @@ class Vgg16():
         weights_file = os.path.join(base_path, self.cfgs['model_weights_path'])
 
         self.data_dict = np.load(weights_file, encoding='latin1').item()
-        self.io.print_info("Model weights loaded from {}".format(self.cfgs['model_weights_path']))
+        self.io.print_info("Model weights loaded from {}".format(
+            self.cfgs['model_weights_path']))
 
-        self.images = tf.placeholder(tf.float32, [None, self.cfgs[run]['image_height'], self.cfgs[run]['image_width'], self.cfgs[run]['n_channels']])
-        self.edgemaps = tf.placeholder(tf.float32, [None, self.cfgs[run]['image_height'], self.cfgs[run]['image_width'], 1])
+        self.images = tf.placeholder(tf.float32, [
+            None, self.cfgs[run]['image_height'],
+            self.cfgs[run]['image_width'], self.cfgs[run]['n_channels']
+        ])
+        self.edgemaps = tf.placeholder(tf.float32, [
+            None, self.cfgs[run]['image_height'],
+            self.cfgs[run]['image_width'], 1
+        ])
 
         self.define_model()
 
     def define_model(self):
-
         """
         Load VGG params from disk without FC layers A
         Add branch layers (with deconv) after each CONV block
@@ -75,12 +78,17 @@ class Vgg16():
 
         self.io.print_info('Added CONV-BLOCK-5+SIDE-5')
 
-        self.side_outputs = [self.side_1, self.side_2, self.side_3, self.side_4, self.side_5]
+        self.side_outputs = [
+            self.side_1, self.side_2, self.side_3, self.side_4, self.side_5
+        ]
 
         w_shape = [1, 1, len(self.side_outputs), 1]
-        self.fuse = self.conv_layer(tf.concat(self.side_outputs, axis=3),
-                                    w_shape, name='fuse_1', use_bias=False,
-                                    w_init=tf.constant_initializer(0.2))
+        self.fuse = self.conv_layer(
+            tf.concat(self.side_outputs, axis=3),
+            w_shape,
+            name='fuse_1',
+            use_bias=False,
+            w_init=tf.constant_initializer(0.2))
 
         self.io.print_info('Added FUSE layer')
 
@@ -88,10 +96,16 @@ class Vgg16():
         self.outputs = self.side_outputs + [self.fuse]
 
         self.data_dict = None
-        self.io.print_info("Build model finished: {:.4f}s".format(time.time() - start_time))
+        self.io.print_info(
+            "Build model finished: {:.4f}s".format(time.time() - start_time))
 
     def max_pool(self, bottom, name):
-        return tf.nn.max_pool(bottom, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME', name=name)
+        return tf.nn.max_pool(
+            bottom,
+            ksize=[1, 2, 2, 1],
+            strides=[1, 2, 2, 1],
+            padding='SAME',
+            name=name)
 
     def conv_layer_vgg(self, bottom, name):
         """
@@ -108,8 +122,15 @@ class Vgg16():
             relu = tf.nn.relu(bias)
             return relu
 
-    def conv_layer(self, x, W_shape, b_shape=None, name=None,
-                   padding='SAME', use_bias=True, w_init=None, b_init=None):
+    def conv_layer(self,
+                   x,
+                   W_shape,
+                   b_shape=None,
+                   name=None,
+                   padding='SAME',
+                   use_bias=True,
+                   w_init=None,
+                   b_init=None):
 
         W = self.weight_variable(W_shape, w_init)
         tf.summary.histogram('weights_{}'.format(name), W)
@@ -133,29 +154,37 @@ class Vgg16():
         W = self.weight_variable(w_shape, w_init)
         tf.summary.histogram('weights_{}'.format(name), W)
 
-        out_shape = tf.stack([x_shape[0], x_shape[1], x_shape[2], w_shape[2]]) * tf.constant(strides, tf.int32)
-        deconv = tf.nn.conv2d_transpose(x, W, out_shape, strides=strides, padding=padding)
+        out_shape = tf.stack([x_shape[0], x_shape[1], x_shape[2], w_shape[2]
+                              ]) * tf.constant(strides, tf.int32)
+        deconv = tf.nn.conv2d_transpose(
+            x, W, out_shape, strides=strides, padding=padding)
 
         return deconv
 
     def side_layer(self, inputs, name, upscale):
         """
             https://github.com/s9xie/hed/blob/9e74dd710773d8d8a469ad905c76f4a7fa08f945/examples/hed/train_val.prototxt#L122
-            1x1 conv followed with Deconvoltion layer to upscale the size of input image sans color
+            1x1 conv followed with Deconvoltion layer to upscale the size of
+            input image sans color
         """
         with tf.variable_scope(name):
 
             in_shape = inputs.shape.as_list()
             w_shape = [1, 1, in_shape[-1], 1]
 
-            classifier = self.conv_layer(inputs, w_shape, b_shape=1,
-                                         w_init=tf.constant_initializer(),
-                                         b_init=tf.constant_initializer(),
-                                         name=name + '_reduction')
+            classifier = self.conv_layer(
+                inputs,
+                w_shape,
+                b_shape=1,
+                w_init=tf.constant_initializer(),
+                b_init=tf.constant_initializer(),
+                name=name + '_reduction')
 
-            classifier = self.deconv_layer(classifier, upscale=upscale,
-                                           name='{}_deconv_{}'.format(name, upscale),
-                                           w_init=tf.truncated_normal_initializer(stddev=0.1))
+            classifier = self.deconv_layer(
+                classifier,
+                upscale=upscale,
+                name='{}_deconv_{}'.format(name, upscale),
+                w_init=tf.truncated_normal_initializer(stddev=0.1))
 
             return classifier
 
@@ -176,9 +205,9 @@ class Vgg16():
         return tf.Variable(init)
 
     def setup_testing(self, session):
-
         """
-            Apply sigmoid non-linearity to side layer ouputs + fuse layer outputs for predictions
+            Apply sigmoid non-linearity to side layer ouputs + fuse layer
+            outputs for predictions
         """
 
         self.predictions = []
@@ -188,34 +217,41 @@ class Vgg16():
             self.predictions.append(output)
 
     def setup_training(self, session):
-
         """
-            Apply sigmoid non-linearity to side layer ouputs + fuse layer outputs
+            Apply sigmoid non-linearity to side layer ouputs + fuse layer
+            outputs
+
             Compute total loss := side_layer_loss + fuse_layer_loss
-            Compute predicted edge maps from fuse layer as pseudo performance metric to track
-        """
 
+            Compute predicted edge maps from fuse layer as pseudo performance
+            metric to track
+        """
         self.predictions = []
         self.loss = 0
 
-        self.io.print_warning('Deep supervision application set to {}'.format(self.cfgs['deep_supervision']))
+        self.io.print_warning('Deep supervision application set to {}'.format(
+            self.cfgs['deep_supervision']))
 
         for idx, b in enumerate(self.side_outputs):
             output = tf.nn.sigmoid(b, name='output_{}'.format(idx))
-            cost = sigmoid_cross_entropy_balanced(b, self.edgemaps, name='cross_entropy{}'.format(idx))
+            cost = sigmoid_cross_entropy_balanced(
+                b, self.edgemaps, name='cross_entropy{}'.format(idx))
 
             self.predictions.append(output)
             if self.cfgs['deep_supervision']:
                 self.loss += (self.cfgs['loss_weights'] * cost)
 
         fuse_output = tf.nn.sigmoid(self.fuse, name='fuse')
-        fuse_cost = sigmoid_cross_entropy_balanced(self.fuse, self.edgemaps, name='cross_entropy_fuse')
+        fuse_cost = sigmoid_cross_entropy_balanced(
+            self.fuse, self.edgemaps, name='cross_entropy_fuse')
 
         self.predictions.append(fuse_output)
         self.loss += (self.cfgs['loss_weights'] * fuse_cost)
 
-        pred = tf.cast(tf.greater(fuse_output, 0.5), tf.int32, name='predictions')
-        error = tf.cast(tf.not_equal(pred, tf.cast(self.edgemaps, tf.int32)), tf.float32)
+        pred = tf.cast(
+            tf.greater(fuse_output, 0.5), tf.int32, name='predictions')
+        error = tf.cast(
+            tf.not_equal(pred, tf.cast(self.edgemaps, tf.int32)), tf.float32)
         self.error = tf.reduce_mean(error, name='pixel_error')
 
         tf.summary.scalar('loss', self.loss)
@@ -223,5 +259,6 @@ class Vgg16():
 
         self.merged_summary = tf.summary.merge_all()
 
-        self.train_writer = tf.summary.FileWriter(self.cfgs['save_dir'] + '/train', session.graph)
+        self.train_writer = tf.summary.FileWriter(
+            self.cfgs['save_dir'] + '/train', session.graph)
         self.val_writer = tf.summary.FileWriter(self.cfgs['save_dir'] + '/val')

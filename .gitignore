@@ -99,3 +99,11 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# Sam: added these so I could put generic paths in default config
+/downloads
+/workspace
+
+# editor junk files
+*.swp
+.#*

@@ -1,11 +1,9 @@
 import os
-import sys
-import argparse
 import yaml
-import urlparse
-import urllib
-import StringIO
-import cStringIO
+import urllib.request
+import urllib.parse
+import urllib.error
+import io
 import numpy as np
 from PIL import Image
 import tensorflow as tf
@@ -15,9 +13,7 @@ from hed.utils.io import IO
 
 
 class HEDTester():
-
     def __init__(self, config_file):
-
         self.io = IO()
         self.init = True
 
@@ -28,47 +24,57 @@ class HEDTester():
 
         except Exception as err:
 
-            self.io.print_error('Error reading config file {}, {}'.format(config_file), err)
+            self.io.print_error(
+                'Error reading config file {}, {}'.format(config_file), err)
 
     def setup(self, session):
-
         try:
 
             self.model = Vgg16(self.cfgs, run='testing')
 
-            meta_model_file = os.path.join(self.cfgs['save_dir'], 'models/hed-model-{}'.format(self.cfgs['test_snapshot']))
+            meta_model_file = os.path.join(self.cfgs['save_dir'],
+                                           'models/hed-model-{}'.format(
+                                               self.cfgs['test_snapshot']))
 
             saver = tf.train.Saver()
             saver.restore(session, meta_model_file)
 
-            self.io.print_info('Done restoring VGG-16 model from {}'.format(meta_model_file))
+            self.io.print_info(
+                'Done restoring VGG-16 model from {}'.format(meta_model_file))
 
         except Exception as err:
 
-            self.io.print_error('Error setting up VGG-16 model, {}'.format(err))
+            self.io.print_error(
+                'Error setting up VGG-16 model, {}'.format(err))
             self.init = False
 
     def run(self, session):
-
         if not self.init:
             return
 
         self.model.setup_testing(session)
 
-        filepath = os.path.join(self.cfgs['download_path'], self.cfgs['testing']['list'])
+        filepath = os.path.join(self.cfgs['download_path'],
+                                self.cfgs['testing']['list'])
         train_list = self.io.read_file_list(filepath)
 
-        self.io.print_info('Writing PNGs at {}'.format(self.cfgs['test_output']))
+        self.io.print_info('Writing PNGs at {}'.format(
+            self.cfgs['test_output']))
 
         for idx, img in enumerate(train_list):
 
-            test_filename = os.path.join(self.cfgs['download_path'], self.cfgs['testing']['dir'], img)
+            test_filename = os.path.join(self.cfgs['download_path'],
+                                         self.cfgs['testing']['dir'], img)
             im = self.fetch_image(test_filename)
 
-            edgemap = session.run(self.model.predictions, feed_dict={self.model.images: [im]})
+            edgemap = session.run(
+                self.model.predictions, feed_dict={
+                    self.model.images: [im]
+                })
             self.save_egdemaps(edgemap, idx)
 
-            self.io.print_info('Done testing {}, {}'.format(test_filename, im.shape))
+            self.io.print_info('Done testing {}, {}'.format(
+                test_filename, im.shape))
 
     def save_egdemaps(self, em_maps, index):
 
@@ -84,29 +90,33 @@ class HEDTester():
             em = np.tile(em, [1, 1, 3])
 
             em = Image.fromarray(np.uint8(em))
-            em.save(os.path.join(self.cfgs['test_output'], 'testing-{}-{:03}.png'.format(index, idx)))
+            em.save(
+                os.path.join(self.cfgs['test_output'],
+                             'testing-{}-{:03}.png'.format(index, idx)))
 
     def fetch_image(self, test_image):
-
         # is url
         image = None
 
-        if not urlparse.urlparse(test_image).scheme == "":
+        if not urllib.parse.urlparse(test_image).scheme == "":
 
-            url_response = urllib.urlopen(test_image)
+            url_response = urllib.request.urlopen(test_image)
 
             if url_response.code == 404:
-                print self.io.print_error('[Testing] URL error code : {1} for {0}'.format(test_image, url_response.code))
+                print(self.io.print_error(
+                    '[Testing] URL error code : {1} for {0}'.format(
+                        test_image, url_response.code)))
                 return None
 
             try:
 
-                image_buffer = cStringIO.StringIO(url_response.read())
+                image_buffer = io.StringIO(url_response.read())
                 image = self.capture_pixels(image_buffer)
 
             except Exception as err:
 
-                print self.io.print_error('[Testing] Error with URL {0} {1}'.format(test_image, err))
+                print(self.io.print_error(
+                    '[Testing] Error with URL {0} {1}'.format(test_image, err)))
                 return None
 
         # read from disk
@@ -118,20 +128,22 @@ class HEDTester():
                 stream = fid.read()
                 fid.close()
 
-                image_buffer = cStringIO.StringIO(stream)
+                image_buffer = io.StringIO(stream)
                 image = self.capture_pixels(image_buffer)
 
             except Exception as err:
 
-                print self.io.print_error('[Testing] Error with image file {0} {1}'.format(test_image, err))
+                print(self.io.print_error(
+                    '[Testing] Error with image file {0} {1}'.format(
+                        test_image, err)))
                 return None
 
         return image
 
     def capture_pixels(self, image_buffer):
-
         image = Image.open(image_buffer)
-        image = image.resize((self.cfgs['testing']['image_width'], self.cfgs['testing']['image_height']))
+        image = image.resize((self.cfgs['testing']['image_width'],
+                              self.cfgs['testing']['image_height']))
         image = np.array(image, np.float32)
         image = self.colorize(image)
 
@@ -141,7 +153,6 @@ class HEDTester():
         return image
 
     def colorize(self, image):
-
         # BW to 3 channel RGB image
         if image.ndim == 2:
             image = image[:, :, np.newaxis]

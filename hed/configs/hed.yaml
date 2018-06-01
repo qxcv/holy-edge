@@ -3,17 +3,17 @@
 # snapshot for now : /nas2/harsimrat/hed-testing-deconv-hist-4/models/hed-model-5000
 rar_file: 'http://vcl.ucsd.edu/hed/HED-BSDS.tar'
 # location where HED-BSDS.tar would be downloaded and decompressed (Should already exist)
-download_path: '/home/harsimrat/hed-data'
+download_path: 'downloads/'
 # location of snapshot and tensorbaord summary events (Should already exist)
-save_dir: /home/harsimrat/workspace/holy-edge/hed
+save_dir: 'workspace/'
 # location where to put the generated edgemaps during testing (Should already exist)
-test_output: /nas2/harsimrat/hed-testing-deconv-hist-4/test/model-5000
+test_output: 'workspace/test-output/'
 # parameters from the paper
 model_weights_path: vgg16.npy
 # training batch size, decide with your GPU size
-batch_size_train: 10
+batch_size_train: 16
 # validation batch size, ran every val_interval
-batch_size_val: 10
+batch_size_val: 32
 # split 30k training images for trainig/validation
 train_split: 0.8
 # maximum iterations to run epoc == 30k/batch_size

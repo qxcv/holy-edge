@@ -18,10 +18,12 @@ def sigmoid_cross_entropy_balanced(logits, label, name='cross_entropy_loss'):
     # Equation [2] divide by 1 - beta
     pos_weight = beta / (1 - beta)
 
-    cost = tf.nn.weighted_cross_entropy_with_logits(logits=logits, targets=y, pos_weight=pos_weight)
+    cost = tf.nn.weighted_cross_entropy_with_logits(
+        logits=logits, targets=y, pos_weight=pos_weight)
 
     # Multiply by 1 - beta
     cost = tf.reduce_mean(cost * (1 - beta))
 
-    # check if image has no edge pixels return 0 else return complete error function
+    # check if image has no edge pixels return 0 else return complete error
+    # function
     return tf.where(tf.equal(count_pos, 0.0), 0.0, cost, name=name)
