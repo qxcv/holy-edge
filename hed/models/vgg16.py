@@ -120,6 +120,7 @@ class Vgg16():
             bias = tf.nn.bias_add(conv, conv_biases)
 
             relu = tf.nn.relu(bias)
+
             return relu
 
     def conv_layer(self,
@@ -145,19 +146,23 @@ class Vgg16():
 
     def deconv_layer(self, x, upscale, name, padding='SAME', w_init=None):
 
-        x_shape = tf.shape(x)
+        # x_shape = tf.shape(x)
         in_shape = x.shape.as_list()
+        out_shape = (in_shape[1] * upscale, in_shape[2] * upscale)
 
-        w_shape = [upscale * 2, upscale * 2, in_shape[-1], 1]
-        strides = [1, upscale, upscale, 1]
+        # w_shape = [upscale * 2, upscale * 2, in_shape[-1], 1]
+        # strides = [1, upscale, upscale, 1]
 
-        W = self.weight_variable(w_shape, w_init)
-        tf.summary.histogram('weights_{}'.format(name), W)
+        # W = self.weight_variable(w_shape, w_init)
+        # tf.summary.histogram('weights_{}'.format(name), W)
 
-        out_shape = tf.stack([x_shape[0], x_shape[1], x_shape[2], w_shape[2]
-                              ]) * tf.constant(strides, tf.int32)
-        deconv = tf.nn.conv2d_transpose(
-            x, W, out_shape, strides=strides, padding=padding)
+        # out_shape = tf.stack([x_shape[0], x_shape[1], x_shape[2], w_shape[2]
+        #                       ]) * tf.constant(strides, tf.int32)
+        # deconv = tf.nn.conv2d_transpose(
+        #     x, W, out_shape, strides=strides, padding=padding)
+
+        deconv = tf.image.resize_bilinear(
+            x, size=out_shape, align_corners=True)
 
         return deconv
 
@@ -258,6 +263,31 @@ class Vgg16():
         tf.summary.scalar('error', self.error)
 
         self.merged_summary = tf.summary.merge_all()
+
+        with tf.name_scope(name='val_images'):
+            chan_swap = self.cfgs['channel_swap']
+            inv_chan_swap = tf.invert_permutation(chan_swap)
+            mean_px = np.asarray(
+                self.cfgs['mean_pixel_value'], dtype='float32') \
+                .reshape(1, 1, 1, 3)
+            in_images_normed = tf.gather(
+                self.images + mean_px, inv_chan_swap, axis=3) / 255
+
+            def tf_grey2rgb(grey):
+                return tf.tile(grey, (1, 1, 1, 3))
+
+            # we need to convert edge maps to RGB and undo the channel swap on
+            # self.images
+            im_summary_tensor = tf.concat(
+                [
+                    tf_grey2rgb(self.edgemaps), in_images_normed,
+                    tf_grey2rgb(fuse_output),
+                    tf_grey2rgb(tf.cast(pred, tf.float32))
+                ],
+                axis=2,
+                name='im_summary_tensor')
+            self.val_im_summary = tf.summary.image(
+                'summary_op', im_summary_tensor, max_outputs=16)
 
         self.train_writer = tf.summary.FileWriter(
             self.cfgs['save_dir'] + '/train', session.graph)

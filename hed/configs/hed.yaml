@@ -1,6 +1,5 @@
 # Before you do anything please set download_path
 # or the location where you have downloaded the rar_file
-# snapshot for now : /nas2/harsimrat/hed-testing-deconv-hist-4/models/hed-model-5000
 rar_file: 'http://vcl.ucsd.edu/hed/HED-BSDS.tar'
 # location where HED-BSDS.tar would be downloaded and decompressed (Should already exist)
 download_path: 'downloads/'
@@ -21,16 +20,14 @@ max_iterations: 100000
 # optimizer params (not used currently Adam is used by defailt)
 optimizer: 'adam'
 optimizer_params:
-    learning_rate: 0.001
+    learning_rate: 0.000001
     weight_decay: 0.0002
 # Section 4.1 Loss for layer fusion
 loss_weights: 1.0
 # save snapshot every save_interval iterations
-save_interval: 100
+save_interval: 1024
 # validate on held out dataset
-val_interval: 10
-# learning rate decay (Not used with Adam currently)
-learning_rate_decay: 0.1
+val_interval: 256
 # Apply weighted_cross_entropy_loss to outputs from each side layer
 # Setting to false only loss after last conv layer is computed
 deep_supervision: True
