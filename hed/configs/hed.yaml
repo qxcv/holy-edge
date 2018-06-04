@@ -10,9 +10,9 @@ test_output: 'workspace/test-output/'
 # parameters from the paper
 model_weights_path: vgg16.npy
 # training batch size, decide with your GPU size
-batch_size_train: 16
+batch_size_train: 8
 # validation batch size, ran every val_interval
-batch_size_val: 32
+batch_size_val: 24
 # split 30k training images for trainig/validation
 train_split: 0.8
 # maximum iterations to run epoc == 30k/batch_size
@@ -35,7 +35,7 @@ deep_supervision: True
 target_regression: True
 # Mean pixel value to subtract from BGR image
 mean_pixel_value: [103.939, 116.779, 123.68]
-# RGB to BGR (VGG-16 trained with BGR blame OpenCV)
+# RGB to BGR (VGG-16 trained with BGR, blame OpenCV)
 channel_swap: [2, 1, 0]
 # training/validation data
 training:

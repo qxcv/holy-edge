@@ -79,7 +79,7 @@ if __name__ == '__main__':
         '--gpu-limit',
         dest='gpu_limit',
         type=float,
-        default=1.0,
+        default=0.98,
         help='Use fraction of GPU memory (Useful with TensorFlow backend)')
 
     args = parser.parse_args()

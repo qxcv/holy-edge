@@ -19,6 +19,7 @@ class HEDTrainer():
         except Exception as err:
             print(('Error reading config file {}, {}'.format(config_file,
                                                              err)))
+            raise err
 
     def setup(self):
         try:
@@ -35,6 +36,7 @@ class HEDTrainer():
             self.io.print_error(
                 'Error setting up VGG-16 model, {}'.format(err))
             self.init = False
+            raise err
 
     def run(self, session):
         if not self.init:
@@ -46,7 +48,9 @@ class HEDTrainer():
 
         opt = tf.train.AdamOptimizer(
             self.cfgs['optimizer_params']['learning_rate'])
-        train = opt.minimize(self.model.loss)
+        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies(update_ops):
+            train = opt.minimize(self.model.loss)
 
         session.run(tf.global_variables_initializer())
 
@@ -59,7 +63,8 @@ class HEDTrainer():
             _, summary, loss = session.run(
                 [train, self.model.merged_summary, self.model.loss],
                 feed_dict={self.model.images: im,
-                           self.model.edgemaps: em},
+                           self.model.edgemaps: em,
+                           self.model.training: True},
                 options=run_options,
                 run_metadata=run_metadata)
 
@@ -87,7 +92,8 @@ class HEDTrainer():
                     ],
                     feed_dict={
                         self.model.images: im,
-                        self.model.edgemaps: em
+                        self.model.edgemaps: em,
+                        self.model.training: True
                     })
 
                 self.model.val_writer.add_summary(summary, idx)

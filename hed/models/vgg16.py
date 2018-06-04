@@ -11,9 +11,10 @@ from hed.utils.io import IO
 
 class Vgg16():
     def __init__(self, cfgs, run='training'):
-
         self.cfgs = cfgs
         self.io = IO()
+
+        self.training = tf.placeholder(shape=(), dtype=tf.bool)
 
         base_path = os.path.abspath(os.path.dirname(__file__))
         weights_file = os.path.join(base_path, self.cfgs['model_weights_path'])
@@ -41,39 +42,47 @@ class Vgg16():
 
         start_time = time.time()
 
-        self.conv1_1 = self.conv_layer_vgg(self.images, "conv1_1")
-        self.conv1_2 = self.conv_layer_vgg(self.conv1_1, "conv1_2")
+        self.conv1_1 = self.conv_layer(self.images, 64, (3, 3), name="conv1_1")
+        self.conv1_2 = self.conv_layer(
+            self.conv1_1, 64, (3, 3), name="conv1_2")
         self.side_1 = self.side_layer(self.conv1_2, "side_1", 1)
         self.pool1 = self.max_pool(self.conv1_2, 'pool1')
 
         self.io.print_info('Added CONV-BLOCK-1+SIDE-1')
 
-        self.conv2_1 = self.conv_layer_vgg(self.pool1, "conv2_1")
-        self.conv2_2 = self.conv_layer_vgg(self.conv2_1, "conv2_2")
+        self.conv2_1 = self.conv_layer(self.pool1, 128, (3, 3), name="conv2_1")
+        self.conv2_2 = self.conv_layer(
+            self.conv2_1, 128, (3, 3), name="conv2_2")
         self.side_2 = self.side_layer(self.conv2_2, "side_2", 2)
         self.pool2 = self.max_pool(self.conv2_2, 'pool2')
 
         self.io.print_info('Added CONV-BLOCK-2+SIDE-2')
 
-        self.conv3_1 = self.conv_layer_vgg(self.pool2, "conv3_1")
-        self.conv3_2 = self.conv_layer_vgg(self.conv3_1, "conv3_2")
-        self.conv3_3 = self.conv_layer_vgg(self.conv3_2, "conv3_3")
+        self.conv3_1 = self.conv_layer(self.pool2, 256, (3, 3), name="conv3_1")
+        self.conv3_2 = self.conv_layer(
+            self.conv3_1, 256, (3, 3), name="conv3_2")
+        self.conv3_3 = self.conv_layer(
+            self.conv3_2, 256, (3, 3), name="conv3_3")
         self.side_3 = self.side_layer(self.conv3_3, "side_3", 4)
         self.pool3 = self.max_pool(self.conv3_3, 'pool3')
 
         self.io.print_info('Added CONV-BLOCK-3+SIDE-3')
 
-        self.conv4_1 = self.conv_layer_vgg(self.pool3, "conv4_1")
-        self.conv4_2 = self.conv_layer_vgg(self.conv4_1, "conv4_2")
-        self.conv4_3 = self.conv_layer_vgg(self.conv4_2, "conv4_3")
+        self.conv4_1 = self.conv_layer(self.pool3, 512, (3, 3), name="conv4_1")
+        self.conv4_2 = self.conv_layer(
+            self.conv4_1, 512, (3, 3), name="conv4_2")
+        self.conv4_3 = self.conv_layer(
+            self.conv4_2, 512, (3, 3), name="conv4_3")
         self.side_4 = self.side_layer(self.conv4_3, "side_4", 8)
         self.pool4 = self.max_pool(self.conv4_3, 'pool4')
 
         self.io.print_info('Added CONV-BLOCK-4+SIDE-4')
 
-        self.conv5_1 = self.conv_layer_vgg(self.pool4, "conv5_1")
-        self.conv5_2 = self.conv_layer_vgg(self.conv5_1, "conv5_2")
-        self.conv5_3 = self.conv_layer_vgg(self.conv5_2, "conv5_3")
+        self.conv5_1 = self.conv_layer(self.pool4, 512, (3, 3), name="conv5_1")
+        self.conv5_2 = self.conv_layer(
+            self.conv5_1, 512, (3, 3), name="conv5_2")
+        self.conv5_3 = self.conv_layer(
+            self.conv5_2, 512, (3, 3), name="conv5_3")
         self.side_5 = self.side_layer(self.conv5_3, "side_5", 16)
 
         self.io.print_info('Added CONV-BLOCK-5+SIDE-5')
@@ -82,13 +91,11 @@ class Vgg16():
             self.side_1, self.side_2, self.side_3, self.side_4, self.side_5
         ]
 
-        w_shape = [1, 1, len(self.side_outputs), 1]
-        self.fuse = self.conv_layer(
+        self.fuse = tf.layers.conv2d(
             tf.concat(self.side_outputs, axis=3),
-            w_shape,
+            1, (1, 1),
             name='fuse_1',
-            use_bias=False,
-            w_init=tf.constant_initializer(0.2))
+            use_bias=False)
 
         self.io.print_info('Added FUSE layer')
 
@@ -107,42 +114,51 @@ class Vgg16():
             padding='SAME',
             name=name)
 
-    def conv_layer_vgg(self, bottom, name):
-        """
-            Adding a conv layer + weight parameters from a dict
-        """
-        with tf.variable_scope(name):
-            filt = self.get_conv_filter(name)
-
-            conv = tf.nn.conv2d(bottom, filt, [1, 1, 1, 1], padding='SAME')
-
-            conv_biases = self.get_bias(name)
-            bias = tf.nn.bias_add(conv, conv_biases)
-
-            relu = tf.nn.relu(bias)
-
-            return relu
-
     def conv_layer(self,
                    x,
-                   W_shape,
-                   b_shape=None,
+                   filters,
+                   shape,
+                   *,
                    name=None,
-                   padding='SAME',
+                   padding='same',
                    use_bias=True,
-                   w_init=None,
-                   b_init=None):
+                   use_bn=True,
+                   activation=tf.nn.relu):
+        assert name is not None
+        # TODO: add summary histogram for conv2d and batch norm weights
+        if name in self.data_dict:
+            W, b = self.data_dict[name]
+            kernel_initializer = tf.constant_initializer(W)
+            bias_initializer = tf.constant_initializer(b)
+        else:
+            self.io.print_info('Using new weights for layer "%s"' % name)
+            kernel_initializer = None
+            bias_initializer = tf.zeros_initializer()
+        x = tf.layers.conv2d(
+            x,
+            filters,
+            shape,
+            padding=padding,
+            name=name + '/conv',
+            use_bias=use_bias,
+            kernel_initializer=kernel_initializer,
+            bias_initializer=bias_initializer)
+        x = activation(x, name=name + '/nonlin')
+        if use_bn:
+            x = tf.layers.batch_normalization(
+                x, training=self.training, name=name + '/bn')
+        return x
 
-        W = self.weight_variable(W_shape, w_init)
-        tf.summary.histogram('weights_{}'.format(name), W)
+    #     W = self.weight_variable(W_shape, w_init)
+    #     tf.summary.histogram('weights_{}'.format(name), W)
 
-        if use_bias:
-            b = self.bias_variable([b_shape], b_init)
-            tf.summary.histogram('biases_{}'.format(name), b)
+    #     if use_bias:
+    #         b = self.bias_variable([b_shape], b_init)
+    #         tf.summary.histogram('biases_{}'.format(name), b)
 
-        conv = tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding=padding)
+    #     conv = tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding=padding)
 
-        return conv + b if use_bias else conv
+    #     return conv + b if use_bias else conv
 
     def deconv_layer(self, x, upscale, name, padding='SAME', w_init=None):
 
@@ -173,17 +189,8 @@ class Vgg16():
             input image sans color
         """
         with tf.variable_scope(name):
-
-            in_shape = inputs.shape.as_list()
-            w_shape = [1, 1, in_shape[-1], 1]
-
-            classifier = self.conv_layer(
-                inputs,
-                w_shape,
-                b_shape=1,
-                w_init=tf.constant_initializer(),
-                b_init=tf.constant_initializer(),
-                name=name + '_reduction')
+            classifier = tf.layers.conv2d(
+                inputs, 1, (1, 1), name=name + '_reduction')
 
             classifier = self.deconv_layer(
                 classifier,
@@ -192,22 +199,6 @@ class Vgg16():
                 w_init=tf.truncated_normal_initializer(stddev=0.1))
 
             return classifier
-
-    def get_conv_filter(self, name):
-        return tf.constant(self.data_dict[name][0], name="filter")
-
-    def get_bias(self, name):
-        return tf.constant(self.data_dict[name][1], name="biases")
-
-    def weight_variable(self, shape, initial):
-
-        init = initial(shape)
-        return tf.Variable(init)
-
-    def bias_variable(self, shape, initial):
-
-        init = initial(shape)
-        return tf.Variable(init)
 
     def setup_testing(self, session):
         """

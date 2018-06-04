@@ -69,7 +69,8 @@ class HEDTester():
 
             edgemap = session.run(
                 self.model.predictions, feed_dict={
-                    self.model.images: [im]
+                    self.model.images: [im],
+                    self.model.training: False
                 })
             self.save_egdemaps(edgemap, idx)
 
