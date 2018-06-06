@@ -10,13 +10,13 @@ test_output: 'workspace/test-output/'
 # parameters from the paper
 model_weights_path: vgg16.npy
 # training batch size, decide with your GPU size
-batch_size_train: 8
+batch_size_train: 12
 # validation batch size, ran every val_interval
 batch_size_val: 24
 # split 30k training images for trainig/validation
 train_split: 0.8
 # maximum iterations to run epoc == 30k/batch_size
-max_iterations: 100000
+max_iterations: 300000
 # optimizer params (not used currently Adam is used by defailt)
 optimizer: 'adam'
 optimizer_params:
@@ -42,16 +42,16 @@ training:
     dir: HED-BSDS
     list: HED-BSDS/train_pair.lst
     #
-    image_width: 480
-    image_height: 480
+    image_width: 256
+    image_height: 256
     n_channels: 3
 # testing data
 testing:
     dir: HED-BSDS
     list: HED-BSDS/test.lst
     #
-    image_width: 480
-    image_height: 320
+    image_width: 256
+    image_height: 256
     n_channels: 3
 # use snapshot after test_snapshot intervals for testing
 test_snapshot: 5000

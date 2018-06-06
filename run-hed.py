@@ -15,7 +15,7 @@ def get_session(gpu_fraction):
 
     return tf.Session(
         config=tf.ConfigProto(
-            gpu_options=gpu_options,
+            # gpu_options=gpu_options,
             # num_threads == 0 means system picks best option
             intra_op_parallelism_threads=num_threads))
 

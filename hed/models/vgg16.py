@@ -91,9 +91,89 @@ class Vgg16():
             self.side_1, self.side_2, self.side_3, self.side_4, self.side_5
         ]
 
+        def upscale_cat_2x(small_x, same_x, *, name='upscale', out_chans=32):
+            # first reduce dimensionality
+            small_in_shape = small_x.shape.as_list()
+            if small_in_shape[-1] > out_chans:
+                # 1x1 downsample
+                small_x = self.conv_layer(
+                    small_x,
+                    out_chans, (1, 1),
+                    name=name + '/small_conv1',
+                    padding='same')
+                small_in_shape = small_x.shape.as_list()
+            if same_x.shape.as_list()[3] > out_chans:
+                # do same
+                same_x = self.conv_layer(
+                    same_x,
+                    out_chans, (1, 1),
+                    name=name + '/same_conv1',
+                    padding='same')
+
+            # now resize smaller one and join together two layers
+            small_out_shape = (small_in_shape[1] * 2, small_in_shape[2] * 2)
+            scaled_small_x = tf.image.resize_bilinear(
+                small_x, size=small_out_shape, align_corners=True)
+
+            # out = tf.concat((scaled_small_x, same_x), axis=3)
+
+            # # finally apply a couple of 3x3s to smooth things
+            # out = self.conv_layer(
+            #     out, out_chans, (3, 3), name=name + '/out_conv1')
+            # out = self.conv_layer(
+            #     out, out_chans, (3, 3), name=name + '/out_conv2')
+
+            def double_conv(first_map, second_map, kernel_size=(3, 3),
+                            name=''):
+                out_filters = first_map.shape.as_list()[-1]
+                # only first_conv has bias
+                first_conv = tf.layers.conv2d(
+                    first_map,
+                    out_filters,
+                    kernel_size,
+                    padding='same',
+                    name=name + '_conv1')
+                second_conv = tf.layers.conv2d(
+                    second_map,
+                    out_filters,
+                    kernel_size,
+                    use_bias=False,
+                    padding='same',
+                    name=name + '_conv2')
+                sums = first_conv + second_conv
+                return tf.nn.sigmoid(sums)
+
+            # GRU-ish update, where we treat scaled_small_x as hidden value and
+            # small_x as new input
+            reset = double_conv(
+                scaled_small_x, same_x, name=name + '/gate/reset')
+            update = double_conv(
+                scaled_small_x, same_x, name=name + '/gate/update')
+            attenuated_in = scaled_small_x * reset
+            new_state = double_conv(
+                attenuated_in, same_x, name=name + '/gate/new_state')
+            out = update * scaled_small_x + (1 - update) * new_state
+
+            return out
+
+        # new fuse strategy: go from lowest to highest, upscaling +
+        # concatenating
+        side_convs = [
+            self.conv1_2, self.conv2_2, self.conv3_3, self.conv4_3,
+            self.conv5_3
+        ]
+        small_side = side_convs[-1]
+        for idx, next_side in enumerate(side_convs[:-1][::-1]):
+            small_side = upscale_cat_2x(
+                small_x=small_side, same_x=next_side, name='fuse_up_%d' % idx)
+        # big conv for smoothing
+        small_side = self.conv_layer(small_side, 32, (5, 5), name='fuse_conv')
+
         self.fuse = tf.layers.conv2d(
-            tf.concat(self.side_outputs, axis=3),
-            1, (1, 1),
+            # tf.concat(self.side_outputs, axis=3),
+            small_side,
+            1,
+            (1, 1),
             name='fuse_1',
             use_bias=False)
 
@@ -121,7 +201,6 @@ class Vgg16():
                    *,
                    name=None,
                    padding='same',
-                   use_bias=True,
                    use_bn=True,
                    activation=tf.nn.relu):
         assert name is not None
@@ -140,7 +219,6 @@ class Vgg16():
             shape,
             padding=padding,
             name=name + '/conv',
-            use_bias=use_bias,
             kernel_initializer=kernel_initializer,
             bias_initializer=bias_initializer)
         x = activation(x, name=name + '/nonlin')
@@ -160,7 +238,7 @@ class Vgg16():
 
     #     return conv + b if use_bias else conv
 
-    def deconv_layer(self, x, upscale, name, padding='SAME', w_init=None):
+    def deconv_layer(self, x, upscale, name, padding='same', w_init=None):
 
         # x_shape = tf.shape(x)
         in_shape = x.shape.as_list()
@@ -189,14 +267,27 @@ class Vgg16():
             input image sans color
         """
         with tf.variable_scope(name):
+            # scaled = inputs
+
+            # levels = int(np.log2(upscale))
+            # assert 2**levels == upscale
+
+            # # use learnt upscaling strategy
+            # # TODO: pass in low-level edges at each scale level!
+            # for level in range(levels):
+            #     scaled = self.upscale_2x(scaled, '%s_upscale_2x_%d' % (name,
+            #                                                            level))
+
+            # # final conv to tidy things
+            # chans = scaled.shape.as_list()[-1]
+            # scaled = self.conv_layer(
+            #     scaled, chans, (3, 3), name=name + '_conv')
+
+            # classify + upscale (saves memory late in the net)
             classifier = tf.layers.conv2d(
                 inputs, 1, (1, 1), name=name + '_reduction')
-
             classifier = self.deconv_layer(
-                classifier,
-                upscale=upscale,
-                name='{}_deconv_{}'.format(name, upscale),
-                w_init=tf.truncated_normal_initializer(stddev=0.1))
+                classifier, upscale, name=name + '_upscale')
 
             return classifier
 
@@ -268,14 +359,15 @@ class Vgg16():
                 return tf.tile(grey, (1, 1, 1, 3))
 
             # we need to convert edge maps to RGB and undo the channel swap on
-            # self.images
+            # self.images, then make a 3x3 grid of outputs
+            cells = [tf_grey2rgb(self.edgemaps), in_images_normed] \
+                + [tf_grey2rgb(out) for out in self.predictions] \
+                + [tf_grey2rgb(tf.cast(pred, tf.float32))]
+            assert len(cells) == 9
+            grid = [cells[:3], cells[3:6], cells[6:]]
             im_summary_tensor = tf.concat(
-                [
-                    tf_grey2rgb(self.edgemaps), in_images_normed,
-                    tf_grey2rgb(fuse_output),
-                    tf_grey2rgb(tf.cast(pred, tf.float32))
-                ],
-                axis=2,
+                [tf.concat(r, axis=2) for r in grid],
+                axis=1,
                 name='im_summary_tensor')
             self.val_im_summary = tf.summary.image(
                 'summary_op', im_summary_tensor, max_outputs=16)
