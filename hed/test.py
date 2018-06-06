@@ -23,9 +23,9 @@ class HEDTester():
             pfile.close()
 
         except Exception as err:
-
             self.io.print_error(
                 'Error reading config file {}, {}'.format(config_file), err)
+            raise
 
     def setup(self, session):
         try:
@@ -43,10 +43,10 @@ class HEDTester():
                 'Done restoring VGG-16 model from {}'.format(meta_model_file))
 
         except Exception as err:
-
             self.io.print_error(
                 'Error setting up VGG-16 model, {}'.format(err))
             self.init = False
+            raise
 
     def run(self, session):
         if not self.init:
@@ -60,6 +60,7 @@ class HEDTester():
 
         self.io.print_info('Writing PNGs at {}'.format(
             self.cfgs['test_output']))
+        os.makedirs(self.cfgs['test_output'], exist_ok=True)
 
         for idx, img in enumerate(train_list):
 
@@ -115,36 +116,35 @@ class HEDTester():
                 image = self.capture_pixels(image_buffer)
 
             except Exception as err:
-
                 print(self.io.print_error(
                     '[Testing] Error with URL {0} {1}'.format(test_image, err)))
-                return None
+                raise
 
         # read from disk
         elif os.path.exists(test_image):
-
             try:
 
-                fid = open(test_image, 'r')
+                fid = open(test_image, 'rb')
                 stream = fid.read()
                 fid.close()
 
-                image_buffer = io.StringIO(stream)
+                image_buffer = io.BytesIO(stream)
                 image = self.capture_pixels(image_buffer)
 
             except Exception as err:
-
                 print(self.io.print_error(
                     '[Testing] Error with image file {0} {1}'.format(
                         test_image, err)))
-                return None
+                raise
 
         return image
 
     def capture_pixels(self, image_buffer):
         image = Image.open(image_buffer)
-        image = image.resize((self.cfgs['testing']['image_width'],
-                              self.cfgs['testing']['image_height']))
+        if self.cfgs['testing']['image_width'] is not None:
+            assert self.cfgs['testing']['image_height'] is not None
+            image = image.resize((self.cfgs['testing']['image_width'],
+                                  self.cfgs['testing']['image_height']))
         image = np.array(image, np.float32)
         image = self.colorize(image)
 

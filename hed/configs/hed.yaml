@@ -49,11 +49,11 @@ training:
 testing:
     dir: HED-BSDS
     list: HED-BSDS/test.lst
-    #
-    image_width: 256
-    image_height: 256
+    # ~ is equivalent to None, which means 'run at original resolution'
+    image_width: ~
+    image_height: ~
     n_channels: 3
 # use snapshot after test_snapshot intervals for testing
-test_snapshot: 5000
+test_snapshot: 132096
 # Apply testing_threshold after sigmoid to generate binary maps set to 0.0 for continous valued edge maps
 testing_threshold: 0.0
